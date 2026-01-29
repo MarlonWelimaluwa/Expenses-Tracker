@@ -7,6 +7,7 @@ import AddExpenseForm from '../components/AddExpenseForm';
 import ExpenseItem from '../components/ExpenseItem';
 import ThemeToggle from '../components/ThemeToggle';
 import StatsCards from '../components/StatsCards';
+import { LogOut } from 'lucide-react';
 
 
 export default function Dashboard() {
@@ -163,13 +164,18 @@ export default function Dashboard() {
                         <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">Track your spending</p>
                     </div>
                     <div className="flex items-center gap-3">
+                        <p className="text-sm text-gray-600 dark:text-gray-400">
+                            Hello, <span className="font-semibold text-gray-800 dark:text-white">
+                                        {user?.user_metadata?.username || 'User'}
+                                    </span>
+                        </p>
                         <ThemeToggle />
-                        <p className="text-sm text-gray-600 dark:text-gray-400">{user?.email}</p>
                         <button
                             onClick={handleLogout}
-                            className="px-4 py-2 bg-red-600 dark:bg-red-700 text-white rounded-lg hover:bg-red-700 dark:hover:bg-red-800 font-semibold cursor-pointer transition-colors"
+                            className="flex items-center gap-2 px-4 py-2 bg-red-600 dark:bg-red-700 text-white rounded-lg hover:bg-red-700 dark:hover:bg-red-800 font-semibold cursor-pointer transition-all hover:scale-105 shadow-lg"
                         >
-                            Logout
+                            <LogOut size={18} />
+                            <span>Logout</span>
                         </button>
                     </div>
                 </div>

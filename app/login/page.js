@@ -7,6 +7,7 @@ import { useRouter } from 'next/navigation';
 export default function Login() {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
+    const [username, setUsername] = useState('');
     const [isSignUp, setIsSignUp] = useState(false);
     const [loading, setLoading] = useState(false);
     const [message, setMessage] = useState('');
@@ -19,14 +20,24 @@ export default function Login() {
 
         try {
             if (isSignUp) {
-                // Sign up new user
+                // Sign up new user with username
                 const { data, error } = await supabase.auth.signUp({
                     email,
                     password,
+                    options: {
+                        data: {
+                            username: username,
+                        }
+                    }
                 });
 
                 if (error) throw error;
-                setMessage('Account created! Please check your email to verify.');
+
+                setEmail('');
+                setPassword('');
+                setUsername('');
+                setIsSignUp(false);
+                setMessage('Account created! You can now login.');
             } else {
                 // Login existing user
                 const { data, error } = await supabase.auth.signInWithPassword({
@@ -57,6 +68,23 @@ export default function Login() {
                 </div>
 
                 <form onSubmit={handleAuth} className="space-y-4">
+                    {/* Username - only show in signup */}
+                    {isSignUp && (
+                        <div>
+                            <label className="block text-sm font-semibold text-gray-700 mb-2">
+                                Username
+                            </label>
+                            <input
+                                type="text"
+                                value={username}
+                                onChange={(e) => setUsername(e.target.value)}
+                                required={isSignUp}
+                                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 font-medium"
+                                placeholder="John Doe"
+                            />
+                        </div>
+                    )}
+
                     {/* Email */}
                     <div>
                         <label className="block text-sm font-semibold text-gray-700 mb-2">
@@ -112,7 +140,10 @@ export default function Login() {
                 {/* Toggle Sign Up / Login */}
                 <div className="mt-6 text-center">
                     <button
-                        onClick={() => setIsSignUp(!isSignUp)}
+                        onClick={() => {
+                            setIsSignUp(!isSignUp);
+                            setMessage('');
+                        }}
                         className="text-blue-600 hover:text-blue-700 font-medium cursor-pointer"
                     >
                         {isSignUp

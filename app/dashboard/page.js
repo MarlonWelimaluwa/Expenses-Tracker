@@ -3,484 +3,322 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
-import { LogOut, Settings as SettingsIcon } from 'lucide-react';
 import { CURRENCIES } from '@/lib/currencies';
-
-import AddExpenseForm from '../components/AddExpenseForm';
-import ExpenseItem from '../components/ExpenseItem';
-import ThemeToggle from '../components/ThemeToggle';
-import StatsCards from '../components/StatsCards';
-import SettingsModal from '../components/SettingsModal';
-import SavingsCards from '../components/SavingsCards';
-import IncomeTracker from '../components/IncomeTracker';
-import BudgetProgress from '../components/BudgetProgress';
-import DateRangePicker from '../components/DateRangePicker';
-
-import RecurringExpenses from '../components/RecurringExpenses';
-
+import { ArrowRight, TrendingUp, TrendingDown } from 'lucide-react';
 
 export default function Dashboard() {
     const [expenses, setExpenses] = useState([]);
     const [income, setIncome] = useState([]);
+    const [recurring, setRecurring] = useState([]);
     const [settings, setSettings] = useState(null);
     const [loading, setLoading] = useState(true);
-    const [user, setUser] = useState(null);
-    const [showSettings, setShowSettings] = useState(false);
     const router = useRouter();
 
-    const [recurring, setRecurring] = useState([]);
-
-    // Filter states
-    const [filterCategory, setFilterCategory] = useState('All');
-    const [searchTerm, setSearchTerm] = useState('');
-    const [startDate, setStartDate] = useState('');
-    const [endDate, setEndDate] = useState('');
-
-    const categories = ['All', 'Food', 'Transport', 'Entertainment', 'Bills', 'Shopping', 'Health', 'Other'];
-
     useEffect(() => {
-        checkUser();
+        loadData();
     }, []);
 
-    const checkUser = async () => {
+    const loadData = async () => {
         try {
             const { data: { user } } = await supabase.auth.getUser();
+            if (!user) return;
 
-            if (!user) {
-                router.push('/login');
-                return;
-            }
-
-            setUser(user);
-            await Promise.all([
-                fetchExpenses(user.id),
-                fetchIncome(user.id),
-                fetchSettings(user.id),
-                fetchRecurring(user.id)
+            const [expensesData, incomeData, recurringData, settingsData] = await Promise.all([
+                supabase.from('expenses').select('*').eq('user_id', user.id).order('date', { ascending: false }),
+                supabase.from('income').select('*').eq('user_id', user.id).order('date', { ascending: false }),
+                supabase.from('recurring_expenses').select('*').eq('user_id', user.id).eq('is_active', true).order('next_date', { ascending: true }),
+                supabase.from('user_settings').select('*').eq('user_id', user.id).single(),
             ]);
+
+            setExpenses(expensesData.data || []);
+            setIncome(incomeData.data || []);
+            setRecurring(recurringData.data || []);
+            setSettings(settingsData.data);
         } catch (error) {
-            console.error('Error checking user:', error);
-            router.push('/login');
-        }
-    };
-
-    const fetchSettings = async (userId) => {
-        try {
-            const { data, error } = await supabase
-                .from('user_settings')
-                .select('*')
-                .eq('user_id', userId)
-                .single();
-
-            if (data) {
-                setSettings(data);
-            } else {
-                // Create default settings
-                const defaultSettings = {
-                    user_id: userId,
-                    currency: 'LKR',
-                    monthly_budget: 0,
-                    regular_savings_goal: 0,
-                    regular_savings_current: 0,
-                    emergency_goal: 0,
-                    emergency_current: 0,
-                    investment_goal: 0,
-                    investment_current: 0,
-                };
-
-                const { data: newSettings, error: insertError } = await supabase
-                    .from('user_settings')
-                    .insert([defaultSettings])
-                    .select()
-                    .single();
-
-                if (!insertError) {
-                    setSettings(newSettings);
-                }
-            }
-        } catch (error) {
-            console.error('Error fetching settings:', error);
-        }
-    };
-
-    const fetchExpenses = async (userId) => {
-        try {
-            const { data, error } = await supabase
-                .from('expenses')
-                .select('*')
-                .eq('user_id', userId)
-                .order('date', { ascending: false });
-
-            if (error) throw error;
-            setExpenses(data || []);
-        } catch (error) {
-            console.error('Error fetching expenses:', error);
+            console.error('Error loading data:', error);
         } finally {
             setLoading(false);
         }
     };
 
-    const fetchIncome = async (userId) => {
-        try {
-            const { data, error } = await supabase
-                .from('income')
-                .select('*')
-                .eq('user_id', userId)
-                .order('date', { ascending: false });
-
-            if (error) throw error;
-            setIncome(data || []);
-        } catch (error) {
-            console.error('Error fetching income:', error);
-        }
-    };
-
-    const fetchRecurring = async (userId) => {
-        try {
-            const { data, error } = await supabase
-                .from('recurring_expenses')
-                .select('*')
-                .eq('user_id', userId)
-                .order('next_date', { ascending: true });
-
-            if (error) throw error;
-            setRecurring(data || []);
-        } catch (error) {
-            console.error('Error fetching recurring:', error);
-        }
-    };
-
-    const handleAddExpense = async (newExpense) => {
-        try {
-            const { data, error } = await supabase
-                .from('expenses')
-                .insert([{
-                    user_id: user.id,
-                    amount: newExpense.amount,
-                    category: newExpense.category,
-                    description: newExpense.description,
-                    date: newExpense.date,
-                }])
-                .select();
-
-            if (error) throw error;
-            setExpenses([data[0], ...expenses]);
-        } catch (error) {
-            console.error('Error adding expense:', error);
-            alert('Failed to add expense. Please try again.');
-        }
-    };
-
-    const handleAddIncome = async (newIncome) => {
-        try {
-            const { data, error } = await supabase
-                .from('income')
-                .insert([{
-                    user_id: user.id,
-                    amount: newIncome.amount,
-                    category: newIncome.category,
-                    description: newIncome.description,
-                    date: newIncome.date,
-                }])
-                .select();
-
-            if (error) throw error;
-            setIncome([data[0], ...income]);
-        } catch (error) {
-            console.error('Error adding income:', error);
-            alert('Failed to add income. Please try again.');
-        }
-    };
-
-    const handleDeleteExpense = async (id) => {
-        try {
-            const { error } = await supabase
-                .from('expenses')
-                .delete()
-                .eq('id', id)
-                .eq('user_id', user.id);
-
-            if (error) throw error;
-            setExpenses(expenses.filter((expense) => expense.id !== id));
-        } catch (error) {
-            console.error('Error deleting expense:', error);
-            alert('Failed to delete expense. Please try again.');
-        }
-    };
-
-    const handleEditExpense = async (updatedExpense) => {
-        try {
-            const { error } = await supabase
-                .from('expenses')
-                .update({
-                    amount: updatedExpense.amount,
-                    category: updatedExpense.category,
-                    description: updatedExpense.description,
-                    date: updatedExpense.date,
-                })
-                .eq('id', updatedExpense.id)
-                .eq('user_id', user.id);
-
-            if (error) throw error;
-            setExpenses(expenses.map((expense) =>
-                expense.id === updatedExpense.id ? updatedExpense : expense
-            ));
-        } catch (error) {
-            console.error('Error updating expense:', error);
-            alert('Failed to update expense. Please try again.');
-        }
-    };
-
-    const handleUpdateSavings = async (updates) => {
-        try {
-            const { error } = await supabase
-                .from('user_settings')
-                .update(updates)
-                .eq('user_id', user.id);
-
-            if (error) throw error;
-
-            // Update local state
-            setSettings({ ...settings, ...updates });
-        } catch (error) {
-            console.error('Error updating savings:', error);
-            alert('Failed to update savings.');
-        }
-    };
-
-    const handleLogout = async () => {
-        try {
-            const { error } = await supabase.auth.signOut();
-            if (error) throw error;
-            router.push('/login');
-        } catch (error) {
-            console.error('Error logging out:', error);
-        }
-    };
-
-    const handleDateQuickSelect = (type) => {
-        const now = new Date();
-        let start, end;
-
-        if (type === 'thisMonth') {
-            start = new Date(now.getFullYear(), now.getMonth(), 1);
-            end = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-        } else if (type === 'last30') {
-            start = new Date(now);
-            start.setDate(start.getDate() - 30);
-            end = now;
-        } else if (type === 'all') {
-            setStartDate('');
-            setEndDate('');
-            return;
-        }
-
-        setStartDate(start.toISOString().split('T')[0]);
-        setEndDate(end.toISOString().split('T')[0]);
-    };
-
-    // Filter expenses
-    const filteredExpenses = expenses.filter((expense) => {
-        const categoryMatch = filterCategory === 'All' || expense.category === filterCategory;
-        const searchMatch = expense.description.toLowerCase().includes(searchTerm.toLowerCase());
-
-        // Date range filter
-        let dateMatch = true;
-        if (startDate && endDate) {
-            const expenseDate = new Date(expense.date);
-            const start = new Date(startDate);
-            const end = new Date(endDate);
-            dateMatch = expenseDate >= start && expenseDate <= end;
-        }
-
-        return categoryMatch && searchMatch && dateMatch;
-    });
-
-    const total = filteredExpenses.reduce((sum, expense) => sum + expense.amount, 0);
     const currencySymbol = settings ? CURRENCIES[settings.currency]?.symbol : 'Rs.';
+
+    // Calculate totals
+    const thisMonthExpenses = expenses
+        .filter(e => {
+            const expenseDate = new Date(e.date);
+            const now = new Date();
+            return expenseDate.getMonth() === now.getMonth() && expenseDate.getFullYear() === now.getFullYear();
+        })
+        .reduce((sum, e) => sum + e.amount, 0);
+
+    const totalIncome = income.reduce((sum, i) => sum + i.amount, 0);
+    const balance = totalIncome - expenses.reduce((sum, e) => sum + e.amount, 0);
+
+    const budgetPercentage = settings?.monthly_budget > 0
+        ? (thisMonthExpenses / settings.monthly_budget) * 100
+        : 0;
 
     if (loading) {
         return (
-            <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center transition-colors">
-                <p className="text-xl text-gray-600 dark:text-gray-300">Loading...</p>
+            <div className="flex items-center justify-center h-full">
+                <p className="text-gray-600 dark:text-gray-400">Loading...</p>
             </div>
         );
     }
 
     return (
-        <div className="min-h-screen bg-gray-50 dark:bg-gray-900 transition-colors">
-            {/* Fixed Header - NO GAPS */}
-            <div className="sticky top-0 z-10 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-4 py-3 transition-colors">
-                <div className="max-w-full mx-auto flex justify-between items-center">
-                    <div>
-                        <h1 className="text-xl font-bold text-gray-800 dark:text-white">💰 Spendly</h1>
-                        <p className="text-xs text-gray-600 dark:text-gray-400">
-                            Hello, <span className="font-semibold text-gray-800 dark:text-white">
-                {user?.user_metadata?.username || 'User'}
+        <div className="p-8">
+            <div className="max-w-7xl mx-auto space-y-6">
+                {/* Welcome Header */}
+                <div>
+                    <h1 className="text-3xl font-bold text-gray-800 dark:text-white">Dashboard</h1>
+                    <p className="text-gray-600 dark:text-gray-400 mt-1">Your financial overview at a glance</p>
+                </div>
+
+                {/* Top Stats - 3 Cards */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    {/* Balance */}
+                    <div className="bg-gradient-to-br from-green-500 to-green-600 dark:from-green-600 dark:to-green-700 p-6 rounded-xl shadow-lg text-white">
+                        <p className="text-sm opacity-90">Balance</p>
+                        <p className="text-3xl font-bold mt-2">{currencySymbol}{balance.toLocaleString()}</p>
+                        <div className="flex items-center gap-2 mt-2">
+                            {balance >= 0 ? <TrendingUp size={16} /> : <TrendingDown size={16} />}
+                            <p className="text-sm opacity-90">
+                                {balance >= 0 ? 'Positive' : 'Negative'}
+                            </p>
+                        </div>
+                    </div>
+
+                    {/* This Month Expenses */}
+                    <div className="bg-gradient-to-br from-blue-500 to-blue-600 dark:from-blue-600 dark:to-blue-700 p-6 rounded-xl shadow-lg text-white">
+                        <p className="text-sm opacity-90">This Month</p>
+                        <p className="text-3xl font-bold mt-2">{currencySymbol}{thisMonthExpenses.toLocaleString()}</p>
+                        <p className="text-sm opacity-75 mt-2">
+                            {budgetPercentage > 0 ? `${budgetPercentage.toFixed(0)}% of budget` : 'No budget set'}
+                        </p>
+                    </div>
+
+                    {/* Total Income */}
+                    <div className="bg-gradient-to-br from-purple-500 to-purple-600 dark:from-purple-600 dark:to-purple-700 p-6 rounded-xl shadow-lg text-white">
+                        <p className="text-sm opacity-90">Total Income</p>
+                        <p className="text-3xl font-bold mt-2">{currencySymbol}{totalIncome.toLocaleString()}</p>
+                        <p className="text-sm opacity-75 mt-2">{income.length} entries</p>
+                    </div>
+                </div>
+
+                {/* Budget Progress */}
+                {settings?.monthly_budget > 0 && (
+                    <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow transition-colors">
+                        <div className="flex justify-between items-center mb-4">
+                            <h2 className="text-xl font-bold text-gray-800 dark:text-white">Monthly Budget</h2>
+                            <span className="text-lg font-bold text-gray-800 dark:text-white">
+                {budgetPercentage.toFixed(0)}%
               </span>
-                        </p>
-                    </div>
-                    <div className="flex items-center gap-2">
-                        <button
-                            onClick={() => setShowSettings(true)}
-                            className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition cursor-pointer"
-                            title="Settings"
-                        >
-                            <SettingsIcon size={20} className="text-gray-600 dark:text-gray-300" />
-                        </button>
-                        <ThemeToggle />
-                        <button
-                            onClick={handleLogout}
-                            className="flex items-center gap-1.5 px-3 py-1.5 bg-red-600 dark:bg-red-700 text-white rounded-lg hover:bg-red-700 dark:hover:bg-red-800 font-semibold cursor-pointer transition-all hover:scale-105 shadow-lg text-sm"
-                        >
-                            <LogOut size={16} />
-                            <span>Logout</span>
-                        </button>
-                    </div>
-                </div>
-            </div>
-
-            {/* 3-COLUMN LAYOUT - NO GAPS, FULL WIDTH */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 p-3">
-
-                {/* COLUMN 1 - LEFT */}
-                <div className="space-y-3">
-                    <AddExpenseForm onAddExpense={handleAddExpense} currencySymbol={currencySymbol} />
-                    <IncomeTracker income={income} onAddIncome={handleAddIncome} currencySymbol={currencySymbol} />
-                    <RecurringExpenses
-                        recurring={recurring}
-                        onUpdate={() => fetchRecurring(user.id)}
-                        currencySymbol={currencySymbol}
-                        userId={user.id}
-                    />
-                </div>
-
-                {/* COLUMN 2 - MIDDLE (Stats + Budget + Savings) */}
-                <div className="space-y-3">
-                    <StatsCards expenses={expenses} currencySymbol={currencySymbol} />
-                    <BudgetProgress
-                        spent={expenses
-                            .filter(e => {
-                                const expenseDate = new Date(e.date);
-                                const now = new Date();
-                                return expenseDate.getMonth() === now.getMonth() &&
-                                    expenseDate.getFullYear() === now.getFullYear();
-                            })
-                            .reduce((sum, e) => sum + e.amount, 0)
-                        }
-                        budget={settings?.monthly_budget || 0}
-                        currencySymbol={currencySymbol}
-                    />
-                    <SavingsCards
-                        settings={settings}
-                        onUpdate={handleUpdateSavings}
-                        currencySymbol={currencySymbol}
-                    />
-                </div>
-
-                {/* COLUMN 3 - RIGHT (Total + Filters + Expenses List) */}
-                <div className="space-y-3">
-                    {/* Total Card */}
-                    <div className="bg-gradient-to-r from-blue-600 to-purple-600 dark:from-blue-700 dark:to-purple-700 text-white p-5 rounded-lg shadow-lg transition-colors">
-                        <p className="text-xs opacity-90">Total Expenses</p>
-                        <p className="text-3xl font-bold">{currencySymbol}{total.toLocaleString()}</p>
-                        <p className="text-xs opacity-75 mt-1">
-                            Showing {filteredExpenses.length} of {expenses.length} expenses
-                        </p>
-                    </div>
-
-                    {/* Date Range Picker */}
-                    <DateRangePicker
-                        startDate={startDate}
-                        endDate={endDate}
-                        onStartChange={setStartDate}
-                        onEndChange={setEndDate}
-                        onQuickSelect={handleDateQuickSelect}
-                    />
-
-                    {/* Filters */}
-                    <div className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow transition-colors">
-                        <h3 className="text-lg font-semibold mb-3 text-gray-800 dark:text-white">Filters</h3>
-                        <div className="space-y-3">
-                            <div>
-                                <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
-                                    Category
-                                </label>
-                                <select
-                                    value={filterCategory}
-                                    onChange={(e) => setFilterCategory(e.target.value)}
-                                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-white dark:bg-gray-700 font-medium cursor-pointer transition-colors"
-                                >
-                                    {categories.map((cat) => (
-                                        <option key={cat} value={cat}>{cat}</option>
-                                    ))}
-                                </select>
-                            </div>
-
-                            <div>
-                                <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
-                                    Search
-                                </label>
-                                <input
-                                    type="text"
-                                    value={searchTerm}
-                                    onChange={(e) => setSearchTerm(e.target.value)}
-                                    placeholder="Search description..."
-                                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-white dark:bg-gray-700 font-medium transition-colors"
-                                />
-                            </div>
-
-                            {(filterCategory !== 'All' || searchTerm !== '' || startDate !== '' || endDate !== '') && (
-                                <button
-                                    onClick={() => {
-                                        setFilterCategory('All');
-                                        setSearchTerm('');
-                                        setStartDate('');
-                                        setEndDate('');
-                                    }}
-                                    className="w-full px-3 py-2 bg-gray-600 dark:bg-gray-700 text-white text-sm rounded-lg hover:bg-gray-700 dark:hover:bg-gray-600 cursor-pointer transition-colors"
-                                >
-                                    Clear Filters
-                                </button>
-                            )}
                         </div>
+
+                        <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-4 mb-2">
+                            <div
+                                className={`h-4 rounded-full transition-all ${
+                                    budgetPercentage >= 90 ? 'bg-red-500' :
+                                        budgetPercentage >= 70 ? 'bg-yellow-500' :
+                                            'bg-green-500'
+                                }`}
+                                style={{ width: `${Math.min(100, budgetPercentage)}%` }}
+                            ></div>
+                        </div>
+
+                        <div className="flex justify-between text-sm">
+              <span className="text-gray-600 dark:text-gray-400">
+                {currencySymbol}{thisMonthExpenses.toLocaleString()} spent
+              </span>
+                            <span className="text-gray-600 dark:text-gray-400">
+                of {currencySymbol}{settings.monthly_budget.toLocaleString()}
+              </span>
+                        </div>
+
+                        {budgetPercentage >= 90 && (
+                            <p className="text-sm text-red-600 dark:text-red-400 mt-2 font-semibold">
+                                ⚠️ {budgetPercentage >= 100 ? 'OVER BUDGET!' : 'Close to limit!'}
+                            </p>
+                        )}
+                    </div>
+                )}
+
+                {/* Two Column Section */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    {/* Upcoming Bills */}
+                    <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow transition-colors">
+                        <div className="flex justify-between items-center mb-4">
+                            <h2 className="text-xl font-bold text-gray-800 dark:text-white">Upcoming Bills</h2>
+                            <button
+                                onClick={() => router.push('/dashboard/recurring')}
+                                className="text-blue-600 hover:text-blue-700 text-sm font-semibold flex items-center gap-1 cursor-pointer"
+                            >
+                                View All <ArrowRight size={16} />
+                            </button>
+                        </div>
+
+                        {recurring.length === 0 ? (
+                            <p className="text-gray-500 dark:text-gray-400 text-sm text-center py-8">
+                                No upcoming bills
+                            </p>
+                        ) : (
+                            <div className="space-y-3">
+                                {recurring.slice(0, 3).map((item) => (
+                                    <div key={item.id} className="flex justify-between items-center p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
+                                        <div>
+                                            <p className="font-semibold text-gray-800 dark:text-white text-sm">
+                                                {item.description || item.category}
+                                            </p>
+                                            <p className="text-xs text-gray-600 dark:text-gray-400">
+                                                Due: {item.next_date}
+                                            </p>
+                                        </div>
+                                        <p className="font-bold text-gray-800 dark:text-white">
+                                            {currencySymbol}{item.amount}
+                                        </p>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
                     </div>
 
-                    {/* Expenses List */}
-                    <div className="bg-white dark:bg-gray-800 rounded-lg shadow transition-colors">
-                        <div className="p-4">
-                            <h3 className="text-lg font-semibold mb-3 text-gray-800 dark:text-white">Recent Expenses</h3>
-                            {filteredExpenses.length === 0 ? (
-                                <p className="text-gray-500 dark:text-gray-400 text-center py-8 text-sm">
-                                    {expenses.length === 0
-                                        ? 'No expenses yet. Add your first expense!'
-                                        : 'No expenses match your filters.'}
-                                </p>
-                            ) : (
-                                <div className="space-y-2 max-h-96 overflow-y-auto">
-                                    {filteredExpenses.map((expense) => (
-                                        <ExpenseItem
-                                            key={expense.id}
-                                            expense={expense}
-                                            onDelete={handleDeleteExpense}
-                                            onEdit={handleEditExpense}
-                                        />
-                                    ))}
+                    {/* Savings Summary */}
+                    <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow transition-colors">
+                        <div className="flex justify-between items-center mb-4">
+                            <h2 className="text-xl font-bold text-gray-800 dark:text-white">Savings</h2>
+                            <button
+                                onClick={() => router.push('/dashboard/savings')}
+                                className="text-blue-600 hover:text-blue-700 text-sm font-semibold flex items-center gap-1 cursor-pointer"
+                            >
+                                Manage <ArrowRight size={16} />
+                            </button>
+                        </div>
+
+                        <div className="space-y-4">
+                            {/* Regular Savings */}
+                            <div>
+                                <div className="flex justify-between text-sm mb-1">
+                                    <span className="text-gray-700 dark:text-gray-300">💰 Regular Savings</span>
+                                    <span className="font-semibold text-gray-800 dark:text-white">
+                    {settings?.regular_savings_goal > 0
+                        ? `${((settings.regular_savings_current / settings.regular_savings_goal) * 100).toFixed(0)}%`
+                        : '0%'}
+                  </span>
                                 </div>
-                            )}
+                                <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                                    <div
+                                        className="bg-green-500 h-2 rounded-full"
+                                        style={{
+                                            width: `${settings?.regular_savings_goal > 0
+                                                ? Math.min(100, (settings.regular_savings_current / settings.regular_savings_goal) * 100)
+                                                : 0}%`
+                                        }}
+                                    ></div>
+                                </div>
+                            </div>
+
+                            {/* Emergency Fund */}
+                            <div>
+                                <div className="flex justify-between text-sm mb-1">
+                                    <span className="text-gray-700 dark:text-gray-300">🚨 Emergency Fund</span>
+                                    <span className="font-semibold text-gray-800 dark:text-white">
+                    {settings?.emergency_goal > 0
+                        ? `${((settings.emergency_current / settings.emergency_goal) * 100).toFixed(0)}%`
+                        : '0%'}
+                  </span>
+                                </div>
+                                <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                                    <div
+                                        className="bg-red-500 h-2 rounded-full"
+                                        style={{
+                                            width: `${settings?.emergency_goal > 0
+                                                ? Math.min(100, (settings.emergency_current / settings.emergency_goal) * 100)
+                                                : 0}%`
+                                        }}
+                                    ></div>
+                                </div>
+                            </div>
+
+                            {/* Investments */}
+                            <div>
+                                <div className="flex justify-between text-sm mb-1">
+                                    <span className="text-gray-700 dark:text-gray-300">📈 Investments</span>
+                                    <span className="font-semibold text-gray-800 dark:text-white">
+                    {settings?.investment_goal > 0
+                        ? `${((settings.investment_current / settings.investment_goal) * 100).toFixed(0)}%`
+                        : '0%'}
+                  </span>
+                                </div>
+                                <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                                    <div
+                                        className="bg-purple-500 h-2 rounded-full"
+                                        style={{
+                                            width: `${settings?.investment_goal > 0
+                                                ? Math.min(100, (settings.investment_current / settings.investment_goal) * 100)
+                                                : 0}%`
+                                        }}
+                                    ></div>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
-            </div>
 
-            {/* Settings Modal */}
-            {showSettings && (
-                <SettingsModal
-                    user={user}
-                    onClose={() => setShowSettings(false)}
-                    onUpdate={() => fetchSettings(user.id)}
-                />
-            )}
+                {/* Recent Expenses */}
+                <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow transition-colors">
+                    <div className="flex justify-between items-center mb-4">
+                        <h2 className="text-xl font-bold text-gray-800 dark:text-white">Recent Expenses</h2>
+                        <button
+                            onClick={() => router.push('/dashboard/expenses')}
+                            className="text-blue-600 hover:text-blue-700 text-sm font-semibold flex items-center gap-1 cursor-pointer"
+                        >
+                            View All <ArrowRight size={16} />
+                        </button>
+                    </div>
+
+                    {expenses.length === 0 ? (
+                        <p className="text-gray-500 dark:text-gray-400 text-sm text-center py-8">
+                            No expenses yet
+                        </p>
+                    ) : (
+                        <div className="space-y-2">
+                            {expenses.slice(0, 5).map((expense) => (
+                                <div key={expense.id} className="flex justify-between items-center p-3 bg-gray-50 dark:bg-gray-700 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-600 transition">
+                                    <div>
+                                        <p className="font-semibold text-gray-800 dark:text-white text-sm">
+                                            {expense.category}
+                                        </p>
+                                        <p className="text-xs text-gray-600 dark:text-gray-400">
+                                            {expense.description} • {expense.date}
+                                        </p>
+                                    </div>
+                                    <p className="font-bold text-gray-800 dark:text-white">
+                                        {currencySymbol}{expense.amount.toLocaleString()}
+                                    </p>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </div>
+
+                {/* Quick Actions */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <button
+                        onClick={() => router.push('/dashboard/expenses')}
+                        className="p-6 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-semibold text-lg shadow-lg transition-all hover:scale-105 cursor-pointer"
+                    >
+                        + Add Expense
+                    </button>
+                    <button
+                        onClick={() => router.push('/dashboard/income')}
+                        className="p-6 bg-green-600 hover:bg-green-700 text-white rounded-xl font-semibold text-lg shadow-lg transition-all hover:scale-105 cursor-pointer"
+                    >
+                        + Add Income
+                    </button>
+                </div>
+            </div>
         </div>
     );
 }

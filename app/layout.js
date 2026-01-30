@@ -12,8 +12,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata = {
-    title: '💰 Expense Tracker',
-    description: 'Track your expenses efficiently',
+    title: '💰 Spendly',
+    description: 'Smart expense tracking made simple',
 }
 
 export default function RootLayout({ children }) {
